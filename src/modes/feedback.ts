@@ -21,16 +21,16 @@ export async function handleFeedback(ctx: ToolContext, params: ToolParams): Prom
     }
 
     case "log_correction": {
-      const mode = params.mode ?? "unknown";
-      const corrAction = params.action ?? "unknown";
+      // Use post_type as the target mode context (params.mode is always "feedback" here)
+      const targetMode = params.post_type ?? "general";
       if (!params.issue) return JSON.stringify({ error: "issue required" });
       if (!params.resolution) return JSON.stringify({ error: "resolution required" });
 
-      ctx.feedback.logCorrection(mode, corrAction, params.issue, params.resolution);
+      ctx.feedback.logCorrection(targetMode, "correction", params.issue, params.resolution);
 
       return JSON.stringify({
         ok: true,
-        logged: { mode, action: corrAction, issue: params.issue, resolution: params.resolution },
+        logged: { mode: targetMode, issue: params.issue, resolution: params.resolution },
       });
     }
 
