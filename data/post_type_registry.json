@@ -1,12 +1,102 @@
 {
   "accepted": {
-    "post": { "label": "Posts", "rest_base": "posts", "accepted_at": "2026-02-22" },
-    "page": { "label": "Pages", "rest_base": "pages", "accepted_at": "2026-02-22" },
-    "product": { "label": "Products", "rest_base": "products", "woocommerce": true, "accepted_at": "2026-02-22" },
-    "outliyr_intel": { "label": "Intelligence Builder", "rest_base": "outliyr_intel", "accepted_at": "2026-02-22" },
-    "odl_dataset": { "label": "Data Lab Datasets", "rest_base": "odl_dataset", "accepted_at": "2026-02-22" },
-    "haq_entry": { "label": "HAQ Entries", "rest_base": "haq_entry", "accepted_at": "2026-02-22" },
-    "peptide_protocol": { "label": "Peptide Protocols", "rest_base": "protocols", "accepted_at": "2026-02-22" }
+    "post": {
+      "label": "Posts",
+      "rest_base": "posts",
+      "accepted_at": "2026-02-22"
+    },
+    "page": {
+      "label": "Pages",
+      "rest_base": "pages",
+      "accepted_at": "2026-02-22"
+    },
+    "product": {
+      "label": "Products",
+      "rest_base": "products",
+      "woocommerce": true,
+      "accepted_at": "2026-02-22"
+    },
+    "outliyr_intel": {
+      "label": "Intelligence Builder",
+      "rest_base": "outliyr_intel",
+      "accepted_at": "2026-02-22"
+    },
+    "odl_dataset": {
+      "label": "Data Lab Datasets",
+      "rest_base": "odl_dataset",
+      "accepted_at": "2026-02-22"
+    },
+    "haq_entry": {
+      "label": "HAQ Entries",
+      "rest_base": "haq_entry",
+      "accepted_at": "2026-02-22"
+    },
+    "peptide_protocol": {
+      "label": "Peptide Protocols",
+      "rest_base": "protocols",
+      "accepted_at": "2026-02-22"
+    },
+    "podcast": {
+      "label": "Podcast",
+      "rest_base": "podcast",
+      "accepted_at": "2026-02-22"
+    },
+    "gp_elements": {
+      "label": "Elements",
+      "rest_base": "gp_elements",
+      "accepted_at": "2026-02-22"
+    },
+    "gblocks_templates": {
+      "label": "Local Patterns (Legacy)",
+      "rest_base": "gblocks_templates",
+      "accepted_at": "2026-02-22"
+    },
+    "rank_math_schema": {
+      "label": "Schemas",
+      "rest_base": "rank_math_schema",
+      "accepted_at": "2026-02-22"
+    }
   },
-  "ignored": {}
+  "ignored": {
+    "nav_menu_item": {
+      "label": "Navigation Menu Items",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "bp3d-model-viewer": {
+      "label": "3D Viewer",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "guests": {
+      "label": "Guest",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "gp_font": {
+      "label": "Fonts",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "gblocks_styles": {
+      "label": "Global Styles",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "gblocks_condition": {
+      "label": "Conditions",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "gblocks_overlay": {
+      "label": "Overlay Panels",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    },
+    "gblocks_global_style": {
+      "label": "Global Styles (Legacy)",
+      "rest_base": "",
+      "ignored_at": "2026-02-22"
+    }
+  }
 }
