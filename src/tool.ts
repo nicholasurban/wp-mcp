@@ -10,21 +10,23 @@ import { handleSettings } from "./modes/settings.js";
 import { handleMedia } from "./modes/media.js";
 import { handleRegisterTypes } from "./modes/register-types.js";
 import { handleFeedback } from "./modes/feedback.js";
+import { handleConvert } from "./modes/convert.js";
 
 export const TOOL_NAME = "wordpress";
 
-export const TOOL_DESCRIPTION = `Manage WordPress (outliyr.com). 7 modes:
+export const TOOL_DESCRIPTION = `Manage WordPress (outliyr.com). 8 modes:
 - dashboard: site overview — WP version, theme, plugin count, post counts by type
 - posts: list/get/create/update/delete any accepted post type (posts, pages, CPTs)
 - products: WooCommerce product CRUD — list/get/create/update/delete
 - settings: read/write WordPress options — general settings or raw wp_options
 - media: list/upload/delete media library items
 - register_types: accept or ignore newly discovered post types
-- feedback: set preferences and log corrections for self-annealing`;
+- feedback: set preferences and log corrections for self-annealing
+- convert: convert markdown content to WordPress Gutenberg blocks`;
 
 export const TOOL_SCHEMA = {
   mode: z
-    .enum(["dashboard", "posts", "products", "settings", "media", "register_types", "feedback"])
+    .enum(["dashboard", "posts", "products", "settings", "media", "register_types", "feedback", "convert"])
     .describe("Operation mode"),
 
   action: z
@@ -48,7 +50,7 @@ export const TOOL_SCHEMA = {
   post_type: z.string().optional().describe("Post type slug: post, page, outliyr_intel, odl_dataset, haq_entry, peptide_protocol, or any accepted CPT"),
   slug: z.string().optional().describe("Post/page URL slug"),
   title: z.string().optional().describe("Post/product title or media title"),
-  content: z.string().optional().describe("Post content (Gutenberg blocks or HTML)"),
+  content: z.string().optional().describe("Post content (Gutenberg blocks or HTML); for convert mode, the markdown content to convert"),
   excerpt: z.string().optional().describe("Post excerpt"),
   status: z.string().optional().describe("Post/product status: draft, publish, pending, private, trash"),
   categories: z.array(z.union([z.string(), z.number()])).optional().describe("Category IDs or names"),
@@ -98,6 +100,10 @@ export const TOOL_SCHEMA = {
   value: z.unknown().optional().describe("Preference value"),
   issue: z.string().optional().describe("Correction: what went wrong"),
   resolution: z.string().optional().describe("Correction: how it was fixed"),
+
+  // Convert
+  strip_ai_commentary: z.boolean().optional().describe("Remove LLM preamble/postamble before converting"),
+  enhance: z.boolean().optional().describe("Process @hint markers (Outliyr custom blocks) before converting"),
 };
 
 export type ToolParams = z.infer<z.ZodObject<typeof TOOL_SCHEMA>>;
@@ -132,8 +138,8 @@ async function preFlightCheck(ctx: ToolContext): Promise<string | null> {
 
 export async function toolHandler(ctx: ToolContext, params: ToolParams): Promise<string> {
   try {
-    // Pre-flight check (skip for register_types and feedback modes)
-    if (params.mode !== "register_types" && params.mode !== "feedback") {
+    // Pre-flight check (skip for register_types, feedback, and convert modes)
+    if (params.mode !== "register_types" && params.mode !== "feedback" && params.mode !== "convert") {
       const blocked = await preFlightCheck(ctx);
       if (blocked) return blocked;
     }
@@ -153,6 +159,8 @@ export async function toolHandler(ctx: ToolContext, params: ToolParams): Promise
         return await handleRegisterTypes(ctx, params);
       case "feedback":
         return await handleFeedback(ctx, params);
+      case "convert":
+        return await handleConvert(ctx, params);
       default:
         return JSON.stringify({ error: `Unknown mode: ${(params as Record<string, unknown>).mode}` });
     }
