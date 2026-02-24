@@ -55,6 +55,16 @@
       "label": "Schemas",
       "rest_base": "rank_math_schema",
       "accepted_at": "2026-02-22"
+    },
+    "outliyr-product": {
+      "label": "Products",
+      "rest_base": "outliyr-product",
+      "accepted_at": "2026-02-23"
+    },
+    "wp_block": {
+      "label": "Patterns",
+      "rest_base": "blocks",
+      "accepted_at": "2026-02-24"
     }
   },
   "ignored": {

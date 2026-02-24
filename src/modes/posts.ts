@@ -56,9 +56,47 @@ async function resolveTermsForBody(
   }
 }
 
+// wp_block posts use wp_pattern_category taxonomy instead of categories
+const PATTERN_CAT_TAXONOMY = "wp_pattern_category";
+
+// Resolve pattern category slugs/names to term IDs, creating if needed
+async function resolvePatternCategoryIds(
+  ctx: ToolContext,
+  input: unknown
+): Promise<number[]> {
+  if (!input) return [];
+  const items = Array.isArray(input) ? input : [input];
+  const ids: number[] = [];
+
+  for (const item of items) {
+    if (typeof item === "number") {
+      ids.push(item);
+      continue;
+    }
+    const slug = String(item);
+    // Search by slug first
+    const existing = await ctx.api.get<{ id: number; slug: string }[]>(
+      `/wp/v2/${PATTERN_CAT_TAXONOMY}`,
+      { slug, per_page: 1 }
+    );
+    if (existing.length > 0) {
+      ids.push(existing[0].id);
+    } else {
+      // Create the pattern category
+      const created = await ctx.api.post<{ id: number }>(
+        `/wp/v2/${PATTERN_CAT_TAXONOMY}`,
+        { name: slug, slug }
+      );
+      ids.push(created.id);
+    }
+  }
+  return ids;
+}
+
 export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise<string> {
   const action = params.action ?? "list";
   const postType = params.post_type ?? "post";
+  const isPatternBlock = postType === "wp_block";
 
   // Validate post type is accepted
   if (!ctx.registry.isAccepted(postType)) {
@@ -91,7 +129,13 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
       if (params.status) queryParams.status = params.status;
       if (params.search) queryParams.search = params.search;
       if (params.orderby) queryParams.orderby = params.orderby;
-      if (params.categories) queryParams.categories = params.categories;
+      if (params.categories) {
+        if (isPatternBlock) {
+          queryParams[PATTERN_CAT_TAXONOMY] = (await resolvePatternCategoryIds(ctx, params.categories)).join(",");
+        } else {
+          queryParams.categories = params.categories;
+        }
+      }
       if (params.tags) queryParams.tags = params.tags;
 
       const posts = await ctx.api.get<Record<string, unknown>[]>(basePath, queryParams);
@@ -133,7 +177,7 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
         slug: post.slug,
         link: post.link,
         type: post.type,
-        categories: post.categories,
+        categories: isPatternBlock ? post[PATTERN_CAT_TAXONOMY] : post.categories,
         tags: post.tags,
         featured_media: post.featured_media,
         meta: post.meta,
@@ -204,9 +248,13 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
       if (params.slug) body.slug = params.slug;
       if (params.meta) body.meta = params.meta;
 
-      // Resolve category/tag names to IDs
+      // Resolve category/tag names to IDs (pattern blocks use a different taxonomy)
       try {
-        await resolveTermsForBody(ctx.api, params, body);
+        if (isPatternBlock && params.categories) {
+          body[PATTERN_CAT_TAXONOMY] = await resolvePatternCategoryIds(ctx, params.categories);
+        } else {
+          await resolveTermsForBody(ctx.api, params, body);
+        }
       } catch (err) {
         return JSON.stringify({ error: (err as Error).message });
       }
@@ -249,15 +297,20 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
       if (params.slug) { body.slug = params.slug; updatedFields.push("slug"); }
       if (params.meta) { body.meta = params.meta; updatedFields.push("meta"); }
 
-      // Resolve category/tag names to IDs
+      // Resolve category/tag names to IDs (pattern blocks use a different taxonomy)
       try {
-        if (params.categories) {
-          body.categories = await resolveTermIds(ctx.api, "categories", params.categories as (string | number)[]);
+        if (isPatternBlock && params.categories) {
+          body[PATTERN_CAT_TAXONOMY] = await resolvePatternCategoryIds(ctx, params.categories);
           updatedFields.push("categories");
-        }
-        if (params.tags) {
-          body.tags = await resolveTermIds(ctx.api, "tags", params.tags as (string | number)[]);
-          updatedFields.push("tags");
+        } else {
+          if (params.categories) {
+            body.categories = await resolveTermIds(ctx.api, "categories", params.categories as (string | number)[]);
+            updatedFields.push("categories");
+          }
+          if (params.tags) {
+            body.tags = await resolveTermIds(ctx.api, "tags", params.tags as (string | number)[]);
+            updatedFields.push("tags");
+          }
         }
       } catch (err) {
         return JSON.stringify({ error: (err as Error).message });
