@@ -2,14 +2,15 @@
 
 MCP server for managing WordPress (outliyr.com) from Claude across all platforms — Claude Code (desktop), Claude web, and iOS.
 
-Single tool (`wordpress`) with 7 modes. Dual transport: stdio for local Claude Code, HTTP + OAuth 2.1 for remote/mobile access.
+Single tool (`wordpress`) with 8 modes. Dual transport: stdio for local Claude Code, HTTP + OAuth 2.1 for remote/mobile access.
 
 ## Features
 
-- **Posts**: CRUD for all registered post types — posts, pages, podcasts, and custom post types
+- **Posts**: CRUD for all registered post types with slug-based idempotency, category/tag name resolution, and featured image URL sideloading
 - **Products**: WooCommerce product management via WC REST API
 - **Settings**: Read/write WordPress options with safety guards (redacted secrets, protected options)
 - **Media**: Upload from URL or base64, list, delete media library items
+- **Convert**: Markdown-to-Gutenberg block conversion with AI commentary stripping and @hint custom block enhancement (9 block types)
 - **Dashboard**: Site overview — title, theme, plugin count, accepted post types
 - **Post Type Discovery**: Auto-detects new custom post types and blocks operations until you accept or ignore them
 - **Self-Annealing**: Feedback system for per-post-type preferences and corrections log
@@ -26,16 +27,25 @@ src/
   feedback.ts           # Self-annealing feedback store
   modes/
     dashboard.ts        # Site overview
-    posts.ts            # Post/page/CPT CRUD with RankMath SEO support
+    posts.ts            # Post/page/CPT CRUD with idempotency, term resolution, image sideloading
     products.ts         # WooCommerce product CRUD
     settings.ts         # WordPress options read/write
     media.ts            # Media library management
+    convert.ts          # Markdown → Gutenberg conversion pipeline
     register-types.ts   # Accept/ignore post type decisions
     feedback.ts         # Preference and correction management
+  converter/
+    inline.ts           # Inline markdown formatting (bold, italic, code, links)
+    markdown.ts         # Line-by-line markdown → Gutenberg block parser
+    strip.ts            # AI commentary stripping (preamble/postamble removal)
+    enhance.ts          # @hint marker state machine (9 custom block types)
+    icons.ts            # SVG constants and unique ID generation
   __tests__/
     api.test.ts         # API client unit tests
     registry.test.ts    # Post type registry tests
     feedback.test.ts    # Feedback store tests
+    convert.test.ts     # Convert mode tests (inline, markdown, strip, enhance)
+    posts.test.ts       # Posts mode tests (idempotency, term resolution, image sideload)
 data/
   post_type_registry.json  # Pre-seeded accepted/ignored types
   feedback.json            # Persisted preferences and corrections
@@ -151,6 +161,7 @@ CRUD for any accepted post type: posts, pages, podcasts, and all custom post typ
 | `categories` | array | list, create, update | Category IDs or names |
 | `tags` | array | list, create, update | Tag IDs or names |
 | `featured_media` | number | create, update | Featured image media ID |
+| `featured_image_url` | string | create, update | URL to sideload as featured image (alternative to featured_media) |
 | `meta` | object | create, update | Custom meta fields `{"key": "value"}` |
 | `orderby` | string | list | Sort field: `date`, `title`, `modified`, `id` |
 | `search` | string | list | Search query |
@@ -180,8 +191,14 @@ SEO fields are written as post meta (`rank_math_title`, `rank_math_description`,
 
 **Create response:**
 ```json
-{"id": 99999, "link": "https://outliyr.com/?p=99999", "edit_link": "https://outliyr.com/wp-admin/post.php?post=99999&action=edit", "status": "draft"}
+{"id": 99999, "link": "https://outliyr.com/?p=99999", "edit_link": "https://outliyr.com/wp-admin/post.php?post=99999&action=edit", "status": "draft", "idempotent_hit": false}
 ```
+
+**Idempotency:** When `slug` is provided on create, the tool checks for an existing post with that slug first. If found, it updates the existing post instead of creating a duplicate and returns `"idempotent_hit": true`.
+
+**Category/tag name resolution:** `categories` and `tags` accept both numeric IDs and string names. Names are resolved to IDs via the WordPress REST API.
+
+**Featured image sideloading:** `featured_image_url` downloads the image, uploads it to the media library, and sets it as the featured image.
 
 **Update response:**
 ```json
@@ -521,6 +538,53 @@ Self-annealing feedback system. Set per-post-type preferences and log correction
 
 ---
 
+### 8. Convert
+
+Convert markdown content to WordPress Gutenberg block markup. Three-stage pipeline: strip AI commentary, enhance @hint markers, convert markdown to blocks.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `content` | string | Markdown content to convert (required) |
+| `strip_ai_commentary` | boolean | Remove LLM preamble/postamble (e.g., "Sure, here is the article...") |
+| `enhance` | boolean | Process `<!-- @hint -->` markers into custom Gutenberg blocks |
+
+**Pipeline order:** strip → enhance → convert. Each stage is optional (gated by its boolean flag), but markdown conversion always runs.
+
+**Supported @hint markers** (when `enhance: true`):
+
+| Hint | Block Generated |
+|------|----------------|
+| `<!-- @click-to-tweet -->` | `wp:bctt/clicktotweet` |
+| `<!-- @protip -->` | GenerateBlocks container with lightbulb icon |
+| `<!-- @discount -->` | GenerateBlocks container with fire icon |
+| `<!-- @faq -->` | `wp:rank-math/faq-block` with Q/A pairs |
+| `<!-- @cta url="..." text="..." -->` | GenerateBlocks button (self-closing) |
+| `<!-- @key-takeaways -->` | Accordion with DNA emoji items |
+| `<!-- @jump-links -->` | Star-icon overview container |
+| `<!-- @data-lab -->` | `wp:outliyr/data-lab` block |
+| `<!-- @product-roundup -->` | Nested product card with sub-sections |
+
+**Markdown conversion** handles: headings (H2-H6 with optional CSS class), paragraphs, ordered/unordered lists, images, blockquotes, code blocks, tables, shortcodes, and raw Gutenberg block passthrough.
+
+**Response:**
+```json
+{"content": "<!-- wp:heading -->\n<h2 class=\"wp-block-heading\">Hello World</h2>\n<!-- /wp:heading -->\n\n<!-- wp:paragraph -->\n<p>A paragraph with <strong>bold</strong> text.</p>\n<!-- /wp:paragraph -->"}
+```
+
+**Examples:**
+
+```json
+// Basic markdown conversion
+{"mode": "convert", "content": "## Hello World\n\nA paragraph with **bold** text."}
+
+// Full pipeline with AI stripping and hint enhancement
+{"mode": "convert", "content": "Sure, here is the article:\n\n## Heading\n\n<!-- @protip -->\nA useful tip\n<!-- @end -->\n\nRegular paragraph.\n\nLet me know if you need changes!", "strip_ai_commentary": true, "enhance": true}
+```
+
+---
+
 ## API Client Details
 
 The `WordPressAPI` class manages two Axios instances:
@@ -562,10 +626,12 @@ npm run build        # Compile TypeScript
 
 ## Tests
 
-17 unit tests covering:
+66 unit tests covering:
 - **API client** (4 tests): Request building, auth headers for WP and WC clients, cache invalidation on mutations, error handling
-- **Post type registry** (8 tests): Accept/ignore, detection of new types, persistence to disk, mutual exclusion (accept removes from ignored and vice versa), built-in type filtering
-- **Feedback store** (5 tests): Set/get preferences, per-post-type isolation, corrections logging, 100-entry cap enforcement, persistence to disk
+- **Post type registry** (8 tests): Accept/ignore, detection of new types, persistence to disk, mutual exclusion, built-in type filtering
+- **Feedback store** (5 tests): Set/get preferences, per-post-type isolation, corrections logging, 100-entry cap, persistence
+- **Convert mode** (35 tests): Inline formatting (6), markdown→Gutenberg (14), AI commentary stripping (5), @hint enhancement (10)
+- **Posts mode** (14 tests): Slug-based idempotency (4), category/tag name resolution (6), featured image URL sideloading (4)
 
 ```bash
 npm test
