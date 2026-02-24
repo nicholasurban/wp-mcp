@@ -87,6 +87,51 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
     case "create": {
       if (!params.title) return JSON.stringify({ error: "title required" });
 
+      // Idempotency: check for existing post by slug
+      if (params.slug) {
+        const existing = await ctx.api.get<Record<string, unknown>[]>(basePath, {
+          slug: params.slug,
+          status: "any",
+          per_page: 1,
+        });
+        if (existing.length > 0) {
+          // Update existing post instead of creating a duplicate
+          const existingId = existing[0].id as number;
+          const body: Record<string, unknown> = {
+            title: params.title,
+          };
+          if (params.content) body.content = params.content;
+          if (params.excerpt) body.excerpt = params.excerpt;
+          if (params.status) body.status = params.status;
+          if (params.categories) body.categories = params.categories;
+          if (params.tags) body.tags = params.tags;
+          if (params.featured_media) body.featured_media = params.featured_media;
+          if (params.meta) body.meta = params.meta;
+
+          const updated = await ctx.api.post<Record<string, unknown>>(`${basePath}/${existingId}`, body);
+
+          // Set RankMath SEO via separate meta update if provided
+          if (params.seo) {
+            const seoMeta: Record<string, unknown> = {};
+            if (params.seo.title) seoMeta.rank_math_title = params.seo.title;
+            if (params.seo.description) seoMeta.rank_math_description = params.seo.description;
+            if (params.seo.focus_keyword) seoMeta.rank_math_focus_keyword = params.seo.focus_keyword;
+            if (Object.keys(seoMeta).length > 0) {
+              await ctx.api.post(`${basePath}/${existingId}`, { meta: seoMeta });
+            }
+          }
+
+          return JSON.stringify({
+            id: existingId,
+            link: updated.link,
+            edit_link: `${process.env.WP_SITE_URL}/wp-admin/post.php?post=${existingId}&action=edit`,
+            status: updated.status,
+            idempotent_hit: true,
+          });
+        }
+      }
+
+      // Normal create path (no existing post found)
       const body: Record<string, unknown> = {
         title: params.title,
         status: params.status ?? defaultStatus,
@@ -117,6 +162,7 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
         link: created.link,
         edit_link: `${process.env.WP_SITE_URL}/wp-admin/post.php?post=${created.id}&action=edit`,
         status: created.status,
+        idempotent_hit: false,
       });
     }
 
