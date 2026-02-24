@@ -184,6 +184,210 @@ function genKeyTakeaways(lines: string[]): string {
 }
 
 /**
+ * Generate a Data Lab Gutenberg block (self-closing).
+ * Matches enhance.sh gen_data_lab() exactly.
+ */
+function genDataLab(title: string, columns: string, rows: string[]): string {
+  const rowData = rows
+    .filter((l) => l.trim())
+    .join("\\n");
+  const escapedTitle = title.replace(/"/g, '\\"');
+  const escapedColumns = columns.replace(/"/g, '\\"');
+  const escapedRows = rowData.replace(/"/g, '\\"');
+
+  return `<!-- wp:outliyr/data-lab {"mode":"local_override","dataEntryMode":"visual","dataFormat":"table","builderTitle":"${escapedTitle}","builderColumnsText":"${escapedColumns}","builderRowsText":"${escapedRows}","showTable":true,"showChart":true,"defaultView":"table","titleTag":"h3"} /-->`;
+}
+
+/**
+ * Generate a stats accordion block for product roundups.
+ * Matches enhance.sh gen_stats_accordion() exactly.
+ */
+function genStatsAccordion(lines: string[]): string {
+  const items = lines
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- "))
+    .map((l) => l.slice(2).trim());
+
+  const uidAccordion = generateUniqueId();
+  const uidItem = generateUniqueId();
+  const uidToggle = generateUniqueId();
+  const uidContent = generateUniqueId();
+
+  const listItems = items
+    .map((item) => `<!-- wp:list-item --><li>${item}</li><!-- /wp:list-item -->`)
+    .join("");
+
+  return [
+    `<!-- wp:generateblocks/container {"uniqueId":"${uidAccordion}","isDynamic":true,"blockVersion":4,"variantRole":"accordion","globalClasses":["accordion-outline"]} -->`,
+    `<!-- wp:generateblocks/container {"uniqueId":"${uidItem}","isDynamic":true,"blockVersion":4,"variantRole":"accordion-item","globalClasses":["accordion-outline-item"]} -->`,
+    `<!-- wp:generateblocks/button {"uniqueId":"${uidToggle}","blockVersion":4,"variantRole":"accordion-toggle","globalClasses":["accordion-outline-title"]} -->`,
+    `<button class="gb-button gb-button-${uidToggle} accordion-outline-title">Product Stats</button>`,
+    `<!-- /wp:generateblocks/button -->`,
+    `<!-- wp:generateblocks/container {"uniqueId":"${uidContent}","isDynamic":true,"blockVersion":4,"variantRole":"accordion-content","globalClasses":["accordion-outline-content"]} -->`,
+    `<!-- wp:list -->`,
+    `<ul class="wp-block-list">${listItems}</ul>`,
+    `<!-- /wp:list -->`,
+    `<!-- /wp:generateblocks/container -->`,
+    `<!-- /wp:generateblocks/container -->`,
+    `<!-- /wp:generateblocks/container -->`,
+  ].join("\n");
+}
+
+/**
+ * Generate a Product Roundup Gutenberg block with nested sub-sections.
+ * Matches enhance.sh gen_product_block() exactly.
+ */
+function genProductRoundup(
+  id: string,
+  name: string,
+  lines: string[],
+): string {
+  let inSub = "";
+  let accolade = "";
+  let imageUrl = "";
+  const statsBuf: string[] = [];
+  let ctaLine = "";
+  const discountBuf: string[] = [];
+
+  for (const line of lines) {
+    // Handle inline sub-sections (both open and close on same line)
+    const inlineAccolade = line.match(
+      /<!-- @accolade -->(.+?)<!-- @end-accolade -->/,
+    );
+    if (inlineAccolade) {
+      accolade = inlineAccolade[1].trim();
+      continue;
+    }
+    const inlineImage = line.match(
+      /<!-- @image -->(.+?)<!-- @end-image -->/,
+    );
+    if (inlineImage) {
+      imageUrl = inlineImage[1].trim();
+      continue;
+    }
+    const inlineDiscount = line.match(
+      /<!-- @discount -->(.+?)<!-- @end-discount -->/,
+    );
+    if (inlineDiscount) {
+      discountBuf.push(inlineDiscount[1].trim());
+      continue;
+    }
+
+    if (line.includes("<!-- @accolade -->")) {
+      inSub = "accolade";
+      continue;
+    }
+    if (line.includes("<!-- @end-accolade -->")) {
+      inSub = "";
+      continue;
+    }
+    if (line.includes("<!-- @image -->")) {
+      inSub = "image";
+      continue;
+    }
+    if (line.includes("<!-- @end-image -->")) {
+      inSub = "";
+      continue;
+    }
+    if (line.includes("<!-- @stats -->")) {
+      inSub = "stats";
+      continue;
+    }
+    if (line.includes("<!-- @end-stats -->")) {
+      inSub = "";
+      continue;
+    }
+    if (line.includes("<!-- @cta ")) {
+      ctaLine = line;
+      continue;
+    }
+    if (line.includes("<!-- @discount -->")) {
+      inSub = "discount";
+      continue;
+    }
+    if (line.includes("<!-- @end-discount -->")) {
+      inSub = "";
+      continue;
+    }
+
+    switch (inSub) {
+      case "accolade":
+        accolade += line.trim();
+        break;
+      case "image":
+        imageUrl += line.trim();
+        break;
+      case "stats":
+        statsBuf.push(line);
+        break;
+      case "discount":
+        discountBuf.push(line);
+        break;
+    }
+  }
+
+  const uidContainer = generateUniqueId();
+  const uidHeadline = generateUniqueId();
+
+  const parts: string[] = [];
+
+  // Opening container
+  parts.push(
+    `<!-- wp:generateblocks/container {"uniqueId":"${uidContainer}","anchor":"${id}","isDynamic":true,"blockVersion":4,"className":"product-container","globalClasses":["product-roundup-container"],"globalStyleId":"1cef8261"} -->`,
+  );
+
+  // Product name headline
+  parts.push(
+    `<!-- wp:generateblocks/headline {"uniqueId":"${uidHeadline}","element":"h3","blockVersion":3,"className":"product-name","globalClasses":["product-roundup-name"]} -->`,
+  );
+  parts.push(
+    `<h3 class="gb-headline gb-headline-${uidHeadline} product-roundup-name product-name" id="${id}">${name}</h3>`,
+  );
+  parts.push(`<!-- /wp:generateblocks/headline -->`);
+
+  // Accolade (if present)
+  if (accolade) {
+    const uidAccolade = generateUniqueId();
+    parts.push(
+      `<!-- wp:generateblocks/headline {"uniqueId":"${uidAccolade}","element":"p","blockVersion":3,"className":"product-accolade","globalClasses":["product-roundup-accolade"]} -->`,
+    );
+    parts.push(
+      `<p class="gb-headline gb-headline-${uidAccolade} product-roundup-accolade product-accolade">${accolade}</p>`,
+    );
+    parts.push(`<!-- /wp:generateblocks/headline -->`);
+  }
+
+  // Image (if present)
+  if (imageUrl) {
+    parts.push(`<!-- wp:image -->`);
+    parts.push(
+      `<figure class="wp-block-image"><img src="${imageUrl}" alt="${name}"/></figure>`,
+    );
+    parts.push(`<!-- /wp:image -->`);
+  }
+
+  // Stats accordion (if present)
+  if (statsBuf.length > 0) {
+    parts.push(genStatsAccordion(statsBuf));
+  }
+
+  // CTA button (if present)
+  if (ctaLine) {
+    parts.push(genCta(ctaLine));
+  }
+
+  // Discount (if present)
+  if (discountBuf.length > 0) {
+    parts.push(genDiscount(discountBuf));
+  }
+
+  // Closing container
+  parts.push(`<!-- /wp:generateblocks/container -->`);
+
+  return parts.join("\n");
+}
+
+/**
  * Generate a Jump Links container Gutenberg block.
  */
 function genJumpLinks(title: string, lines: string[]): string {
@@ -245,6 +449,26 @@ export function enhanceHints(content: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
+    // Product-roundup contains sub-section tags that must NOT be processed
+    // by the main state machine. Buffer everything until @end-product.
+    if (inBlock === "product-roundup") {
+      if (line.includes("<!-- @end-product -->")) {
+        output.push(
+          genProductRoundup(
+            parseAttr(blockAttrs, "id"),
+            parseAttr(blockAttrs, "name"),
+            blockBuf,
+          ),
+        );
+        inBlock = "";
+        blockBuf = [];
+        blockAttrs = "";
+      } else {
+        blockBuf.push(line);
+      }
+      continue;
+    }
+
     // Detect hint opening tags
     if (line.includes("<!-- @click-to-tweet")) {
       inBlock = "click-to-tweet";
@@ -283,6 +507,20 @@ export function enhanceHints(content: string): string {
       blockAttrs = line;
       continue;
     }
+    // @data-lab (has title and columns attributes)
+    if (line.includes("<!-- @data-lab ")) {
+      inBlock = "data-lab";
+      blockBuf = [];
+      blockAttrs = line;
+      continue;
+    }
+    // @product-roundup (has id and name attributes, uses @end-product not @end)
+    if (line.includes("<!-- @product-roundup ")) {
+      inBlock = "product-roundup";
+      blockBuf = [];
+      blockAttrs = line;
+      continue;
+    }
     // @cta (self-closing, no @end needed)
     if (line.includes("<!-- @cta ") && !inBlock) {
       output.push(genCta(line));
@@ -309,6 +547,15 @@ export function enhanceHints(content: string): string {
           break;
         case "jump-links":
           output.push(genJumpLinks(parseAttr(blockAttrs, "title"), blockBuf));
+          break;
+        case "data-lab":
+          output.push(
+            genDataLab(
+              parseAttr(blockAttrs, "title"),
+              parseAttr(blockAttrs, "columns"),
+              blockBuf,
+            ),
+          );
           break;
       }
       inBlock = "";

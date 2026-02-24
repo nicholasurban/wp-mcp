@@ -208,4 +208,33 @@ describe("enhanceHints", () => {
     expect(result).toContain("Top Picks");
     expect(result).toContain("<strong>Product A</strong>");
   });
+
+  it("converts data-lab hint", () => {
+    const input = '<!-- @data-lab title="Test Data" columns="Name,Score" -->\nAlice,95\nBob,87\n<!-- @end -->';
+    const result = enhanceHints(input);
+    expect(result).toContain("wp:outliyr/data-lab");
+    expect(result).toContain("Test Data");
+    expect(result).toContain("Name,Score");
+  });
+
+  it("converts product-roundup hint with sub-sections", () => {
+    const input = [
+      '<!-- @product-roundup id="prod1" name="Cool Product" -->',
+      '<!-- @accolade -->Best Overall<!-- @end-accolade -->',
+      '<!-- @image -->https://example.com/img.jpg<!-- @end-image -->',
+      '<!-- @stats -->',
+      '- **Price:** $99',
+      '- **Rating:** 5/5',
+      '<!-- @end-stats -->',
+      '<!-- @cta url="https://example.com" text="Buy" sponsored="true" -->',
+      '<!-- @discount -->Use code SAVE<!-- @end-discount -->',
+      '<!-- @end-product -->',
+    ].join("\n");
+    const result = enhanceHints(input);
+    expect(result).toContain("product-roundup-container");
+    expect(result).toContain("Cool Product");
+    expect(result).toContain('id="prod1"');
+    expect(result).toContain("Best Overall");
+    expect(result).toContain("$99");
+  });
 });
