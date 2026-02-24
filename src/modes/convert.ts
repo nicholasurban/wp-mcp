@@ -1,5 +1,6 @@
 import { ToolContext, ToolParams } from "../tool.js";
 import { markdownToGutenberg } from "../converter/markdown.js";
+import { stripAiCommentary } from "../converter/strip.js";
 
 export async function handleConvert(
   _ctx: ToolContext,
@@ -9,7 +10,10 @@ export async function handleConvert(
 
   let content = params.content;
 
-  // TODO: strip AI commentary (params.strip_ai_commentary)
+  if (params.strip_ai_commentary) {
+    content = stripAiCommentary(content);
+  }
+
   // TODO: enhance @hints (params.enhance)
 
   content = markdownToGutenberg(content);

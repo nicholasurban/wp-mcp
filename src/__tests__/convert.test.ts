@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { inlineFormat } from "../converter/inline.js";
 import { markdownToGutenberg } from "../converter/markdown.js";
+import { stripAiCommentary } from "../converter/strip.js";
 
 describe("inlineFormat", () => {
   it("converts bold", () => {
@@ -110,5 +111,37 @@ describe("markdownToGutenberg", () => {
     const result = markdownToGutenberg("## Transcript {.podcast-transcript}");
     expect(result).toContain("podcast-transcript");
     expect(result).not.toContain("{.podcast-transcript}");
+  });
+});
+
+describe("stripAiCommentary", () => {
+  it("removes preamble", () => {
+    const input = "Sure, here is the article:\n\n## Real Content\n\nParagraph.";
+    const result = stripAiCommentary(input);
+    expect(result.startsWith("## Real Content")).toBe(true);
+  });
+
+  it("removes postamble", () => {
+    const input = "## Content\n\nParagraph.\n\nLet me know if you'd like changes!";
+    const result = stripAiCommentary(input);
+    expect(result).not.toContain("Let me know");
+  });
+
+  it("removes both preamble and postamble", () => {
+    const input = "Certainly! Here's the article.\n\n## Heading\n\nBody.\n\nWould you like me to revise?";
+    const result = stripAiCommentary(input);
+    expect(result.startsWith("## Heading")).toBe(true);
+    expect(result.endsWith("Body.")).toBe(true);
+  });
+
+  it("leaves clean content unchanged", () => {
+    const input = "## Heading\n\nParagraph.";
+    expect(stripAiCommentary(input)).toBe(input);
+  });
+
+  it("preserves raw Gutenberg blocks", () => {
+    const input = "Here is the content:\n\n<!-- wp:paragraph -->\n<p>Block</p>\n<!-- /wp:paragraph -->";
+    const result = stripAiCommentary(input);
+    expect(result.startsWith("<!-- wp:paragraph -->")).toBe(true);
   });
 });
