@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { inlineFormat } from "../converter/inline.js";
 import { markdownToGutenberg } from "../converter/markdown.js";
 import { stripAiCommentary } from "../converter/strip.js";
+import { enhanceHints } from "../converter/enhance.js";
 
 describe("inlineFormat", () => {
   it("converts bold", () => {
@@ -143,5 +144,35 @@ describe("stripAiCommentary", () => {
     const input = "Here is the content:\n\n<!-- wp:paragraph -->\n<p>Block</p>\n<!-- /wp:paragraph -->";
     const result = stripAiCommentary(input);
     expect(result.startsWith("<!-- wp:paragraph -->")).toBe(true);
+  });
+});
+
+describe("enhanceHints", () => {
+  it("converts click-to-tweet hint", () => {
+    const input = "<!-- @click-to-tweet -->\nTweetable quote here\n<!-- @end -->";
+    const result = enhanceHints(input);
+    expect(result).toContain("wp:bctt/clicktotweet");
+    expect(result).toContain("Tweetable quote here");
+    expect(result).not.toContain("@click-to-tweet");
+  });
+
+  it("converts protip hint", () => {
+    const input = "<!-- @protip -->\nThis is a tip\n<!-- @end -->";
+    const result = enhanceHints(input);
+    expect(result).toContain("wp:generateblocks/container");
+    expect(result).toContain("protip-wrapper");
+    expect(result).toContain("<strong>Pro Tip:</strong> This is a tip");
+  });
+
+  it("converts discount hint", () => {
+    const input = "<!-- @discount -->\nUse code SAVE20 for 20% off\n<!-- @end -->";
+    const result = enhanceHints(input);
+    expect(result).toContain("discount-container");
+    expect(result).toContain("Use code SAVE20 for 20% off");
+  });
+
+  it("passes non-hint content through unchanged", () => {
+    const input = "## Regular Heading\n\nRegular paragraph.";
+    expect(enhanceHints(input)).toBe(input);
   });
 });

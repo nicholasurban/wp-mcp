@@ -1,6 +1,7 @@
 import { ToolContext, ToolParams } from "../tool.js";
 import { markdownToGutenberg } from "../converter/markdown.js";
 import { stripAiCommentary } from "../converter/strip.js";
+import { enhanceHints } from "../converter/enhance.js";
 
 export async function handleConvert(
   _ctx: ToolContext,
@@ -14,7 +15,9 @@ export async function handleConvert(
     content = stripAiCommentary(content);
   }
 
-  // TODO: enhance @hints (params.enhance)
+  if (params.enhance) {
+    content = enhanceHints(content);
+  }
 
   content = markdownToGutenberg(content);
   return JSON.stringify({ content });
