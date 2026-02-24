@@ -8,6 +8,8 @@ function createMockContext() {
       get: vi.fn().mockResolvedValue([]),
       post: vi.fn().mockResolvedValue({ id: 1, link: "https://example.com/test", status: "draft" }),
       delete: vi.fn().mockResolvedValue({ status: "publish" }),
+      downloadUrl: vi.fn(),
+      uploadMedia: vi.fn(),
     },
     registry: {
       isAccepted: vi.fn().mockReturnValue(true),
@@ -139,6 +141,265 @@ describe("posts idempotency", () => {
           rank_math_focus_keyword: "keyword",
         }),
       })
+    );
+  });
+});
+
+describe("category name resolution", () => {
+  it("resolves category names to IDs", async () => {
+    const ctx = createMockContext();
+    // Mock: category search returns match, slug check returns empty (no idempotent hit)
+    ctx.api.get.mockImplementation(async (path: string, params?: any) => {
+      if (path === "/wp/v2/categories") {
+        return [{ id: 5, name: "Biohacking" }];
+      }
+      return []; // slug check returns empty
+    });
+    ctx.api.post.mockResolvedValue({ id: 1, link: "https://example.com/test", status: "draft" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "create",
+      title: "Test",
+      slug: "test",
+      categories: ["Biohacking"],
+    } as any);
+
+    // Verify create was called with resolved ID
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts",
+      expect.objectContaining({ categories: [5] })
+    );
+  });
+
+  it("errors on unknown category name", async () => {
+    const ctx = createMockContext();
+    ctx.api.get.mockImplementation(async (path: string) => {
+      if (path === "/wp/v2/categories") return [];
+      return []; // slug check
+    });
+
+    const result = JSON.parse(
+      await handlePosts(ctx as any, {
+        mode: "posts",
+        action: "create",
+        title: "Test",
+        slug: "test",
+        categories: ["NonExistent"],
+      } as any)
+    );
+
+    expect(result.error).toContain("not found");
+    // Should NOT have called post (no create)
+    expect(ctx.api.post).not.toHaveBeenCalled();
+  });
+
+  it("passes numeric IDs through unchanged", async () => {
+    const ctx = createMockContext();
+    ctx.api.get.mockResolvedValue([]); // slug check returns empty
+    ctx.api.post.mockResolvedValue({ id: 1, link: "https://example.com/test", status: "draft" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "create",
+      title: "Test",
+      slug: "test",
+      categories: [5, 12],
+    } as any);
+
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts",
+      expect.objectContaining({ categories: [5, 12] })
+    );
+  });
+
+  it("resolves category names in update action", async () => {
+    const ctx = createMockContext();
+    ctx.api.get.mockImplementation(async (path: string) => {
+      if (path === "/wp/v2/categories") {
+        return [{ id: 8, name: "Supplements" }];
+      }
+      return [];
+    });
+    ctx.api.post.mockResolvedValue({ id: 10, link: "https://example.com/test", status: "publish" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "update",
+      id: 10,
+      categories: ["Supplements"],
+    } as any);
+
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts/10",
+      expect.objectContaining({ categories: [8] })
+    );
+  });
+
+  it("resolves tag names to IDs", async () => {
+    const ctx = createMockContext();
+    ctx.api.get.mockImplementation(async (path: string) => {
+      if (path === "/wp/v2/tags") {
+        return [{ id: 42, name: "nootropics" }];
+      }
+      return []; // slug check returns empty
+    });
+    ctx.api.post.mockResolvedValue({ id: 1, link: "https://example.com/test", status: "draft" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "create",
+      title: "Test",
+      slug: "test",
+      tags: ["nootropics"],
+    } as any);
+
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts",
+      expect.objectContaining({ tags: [42] })
+    );
+  });
+
+  it("resolves categories in idempotent update path", async () => {
+    const ctx = createMockContext();
+    // First call: slug check returns existing post; subsequent: category resolution
+    let callCount = 0;
+    ctx.api.get.mockImplementation(async (path: string, params?: any) => {
+      if (path === "/wp/v2/categories") {
+        return [{ id: 3, name: "Sleep" }];
+      }
+      // slug check: return existing post
+      return [{ id: 99, link: "https://example.com/existing", status: "draft" }];
+    });
+    ctx.api.post.mockResolvedValue({ id: 99, link: "https://example.com/existing", status: "draft" });
+
+    const result = JSON.parse(
+      await handlePosts(ctx as any, {
+        mode: "posts",
+        action: "create",
+        title: "Test",
+        slug: "existing-slug",
+        categories: ["Sleep"],
+      } as any)
+    );
+
+    expect(result.idempotent_hit).toBe(true);
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts/99",
+      expect.objectContaining({ categories: [3] })
+    );
+  });
+});
+
+describe("featured image URL sideloading", () => {
+  it("downloads and uploads image from URL on create", async () => {
+    const ctx = createMockContext();
+    ctx.api.get.mockResolvedValue([]); // slug check returns empty
+    ctx.api.downloadUrl.mockResolvedValue({
+      data: Buffer.from("fake-image"),
+      mimeType: "image/jpeg",
+      filename: "hero.jpg",
+    });
+    ctx.api.uploadMedia.mockResolvedValue({ id: 456 });
+    ctx.api.post.mockResolvedValue({ id: 1, link: "https://example.com/test", status: "draft" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "create",
+      title: "Test",
+      slug: "test",
+      featured_image_url: "https://example.com/hero.jpg",
+    } as any);
+
+    // Should have downloaded the image
+    expect(ctx.api.downloadUrl).toHaveBeenCalledWith("https://example.com/hero.jpg");
+    // Should have uploaded it
+    expect(ctx.api.uploadMedia).toHaveBeenCalled();
+    // Should have set featured_media on the post
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts",
+      expect.objectContaining({ featured_media: 456 })
+    );
+  });
+
+  it("sideloads image in idempotent update path", async () => {
+    const ctx = createMockContext();
+    // slug check returns existing post
+    ctx.api.get.mockResolvedValue([{ id: 50, link: "https://example.com/existing", status: "draft" }]);
+    ctx.api.downloadUrl.mockResolvedValue({
+      data: Buffer.from("fake-image"),
+      mimeType: "image/png",
+      filename: "cover.png",
+    });
+    ctx.api.uploadMedia.mockResolvedValue({ id: 789 });
+    ctx.api.post.mockResolvedValue({ id: 50, link: "https://example.com/existing", status: "draft" });
+
+    const result = JSON.parse(
+      await handlePosts(ctx as any, {
+        mode: "posts",
+        action: "create",
+        title: "Test",
+        slug: "existing-slug",
+        featured_image_url: "https://example.com/cover.png",
+      } as any)
+    );
+
+    expect(result.idempotent_hit).toBe(true);
+    expect(ctx.api.downloadUrl).toHaveBeenCalledWith("https://example.com/cover.png");
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts/50",
+      expect.objectContaining({ featured_media: 789 })
+    );
+  });
+
+  it("sideloads image in update action", async () => {
+    const ctx = createMockContext();
+    ctx.api.downloadUrl.mockResolvedValue({
+      data: Buffer.from("fake-image"),
+      mimeType: "image/webp",
+      filename: "banner.webp",
+    });
+    ctx.api.uploadMedia.mockResolvedValue({ id: 321 });
+    ctx.api.post.mockResolvedValue({ id: 10, link: "https://example.com/test", status: "publish" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "update",
+      id: 10,
+      featured_image_url: "https://example.com/banner.webp",
+    } as any);
+
+    expect(ctx.api.downloadUrl).toHaveBeenCalledWith("https://example.com/banner.webp");
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts/10",
+      expect.objectContaining({ featured_media: 321 })
+    );
+  });
+
+  it("prefers featured_image_url over featured_media ID", async () => {
+    const ctx = createMockContext();
+    ctx.api.get.mockResolvedValue([]); // slug check returns empty
+    ctx.api.downloadUrl.mockResolvedValue({
+      data: Buffer.from("fake-image"),
+      mimeType: "image/jpeg",
+      filename: "hero.jpg",
+    });
+    ctx.api.uploadMedia.mockResolvedValue({ id: 999 });
+    ctx.api.post.mockResolvedValue({ id: 1, link: "https://example.com/test", status: "draft" });
+
+    await handlePosts(ctx as any, {
+      mode: "posts",
+      action: "create",
+      title: "Test",
+      slug: "test",
+      featured_image_url: "https://example.com/hero.jpg",
+      featured_media: 100,  // This should be ignored
+    } as any);
+
+    // featured_media should come from the uploaded image, not the passed-in value
+    expect(ctx.api.post).toHaveBeenCalledWith(
+      "/wp/v2/posts",
+      expect.objectContaining({ featured_media: 999 })
     );
   });
 });

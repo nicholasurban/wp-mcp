@@ -1,4 +1,60 @@
 import { ToolContext, ToolParams } from "../tool.js";
+import { WordPressAPI } from "../api.js";
+
+async function resolveTermIds(
+  api: WordPressAPI,
+  taxonomy: string,
+  terms: (string | number)[]
+): Promise<number[]> {
+  const ids: number[] = [];
+  for (const term of terms) {
+    if (typeof term === "number") {
+      ids.push(term);
+    } else {
+      const results = await api.get<{ id: number; name: string }[]>(
+        `/wp/v2/${taxonomy}`,
+        { search: term, per_page: 100 }
+      );
+      const match = results.find(
+        (r) => r.name.toLowerCase() === term.toLowerCase()
+      );
+      if (!match) {
+        throw new Error(`${taxonomy} "${term}" not found in WordPress`);
+      }
+      ids.push(match.id);
+    }
+  }
+  return ids;
+}
+
+async function sideloadFeaturedImage(
+  api: WordPressAPI,
+  params: ToolParams,
+  body: Record<string, unknown>
+): Promise<void> {
+  if (params.featured_image_url) {
+    const { data, mimeType, filename } = await api.downloadUrl(params.featured_image_url);
+    const media = await api.uploadMedia(data, filename, mimeType, {
+      title: (params.title as string) ?? filename,
+    });
+    body.featured_media = (media as Record<string, unknown>).id;
+  } else if (params.featured_media) {
+    body.featured_media = params.featured_media;
+  }
+}
+
+async function resolveTermsForBody(
+  api: WordPressAPI,
+  params: ToolParams,
+  body: Record<string, unknown>
+): Promise<void> {
+  if (params.categories) {
+    body.categories = await resolveTermIds(api, "categories", params.categories as (string | number)[]);
+  }
+  if (params.tags) {
+    body.tags = await resolveTermIds(api, "tags", params.tags as (string | number)[]);
+  }
+}
 
 export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise<string> {
   const action = params.action ?? "list";
@@ -103,10 +159,17 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
           if (params.content) body.content = params.content;
           if (params.excerpt) body.excerpt = params.excerpt;
           if (params.status) body.status = params.status;
-          if (params.categories) body.categories = params.categories;
-          if (params.tags) body.tags = params.tags;
-          if (params.featured_media) body.featured_media = params.featured_media;
           if (params.meta) body.meta = params.meta;
+
+          // Resolve category/tag names to IDs
+          try {
+            await resolveTermsForBody(ctx.api, params, body);
+          } catch (err) {
+            return JSON.stringify({ error: (err as Error).message });
+          }
+
+          // Sideload featured image or use provided ID
+          await sideloadFeaturedImage(ctx.api, params, body);
 
           const updated = await ctx.api.post<Record<string, unknown>>(`${basePath}/${existingId}`, body);
 
@@ -139,10 +202,17 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
       if (params.content) body.content = params.content;
       if (params.excerpt) body.excerpt = params.excerpt;
       if (params.slug) body.slug = params.slug;
-      if (params.categories) body.categories = params.categories;
-      if (params.tags) body.tags = params.tags;
-      if (params.featured_media) body.featured_media = params.featured_media;
       if (params.meta) body.meta = params.meta;
+
+      // Resolve category/tag names to IDs
+      try {
+        await resolveTermsForBody(ctx.api, params, body);
+      } catch (err) {
+        return JSON.stringify({ error: (err as Error).message });
+      }
+
+      // Sideload featured image or use provided ID
+      await sideloadFeaturedImage(ctx.api, params, body);
 
       const created = await ctx.api.post<Record<string, unknown>>(basePath, body);
 
@@ -177,10 +247,27 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
       if (params.excerpt) { body.excerpt = params.excerpt; updatedFields.push("excerpt"); }
       if (params.status) { body.status = params.status; updatedFields.push("status"); }
       if (params.slug) { body.slug = params.slug; updatedFields.push("slug"); }
-      if (params.categories) { body.categories = params.categories; updatedFields.push("categories"); }
-      if (params.tags) { body.tags = params.tags; updatedFields.push("tags"); }
-      if (params.featured_media) { body.featured_media = params.featured_media; updatedFields.push("featured_media"); }
       if (params.meta) { body.meta = params.meta; updatedFields.push("meta"); }
+
+      // Resolve category/tag names to IDs
+      try {
+        if (params.categories) {
+          body.categories = await resolveTermIds(ctx.api, "categories", params.categories as (string | number)[]);
+          updatedFields.push("categories");
+        }
+        if (params.tags) {
+          body.tags = await resolveTermIds(ctx.api, "tags", params.tags as (string | number)[]);
+          updatedFields.push("tags");
+        }
+      } catch (err) {
+        return JSON.stringify({ error: (err as Error).message });
+      }
+
+      // Sideload featured image or use provided ID
+      await sideloadFeaturedImage(ctx.api, params, body);
+      if (params.featured_image_url || params.featured_media) {
+        updatedFields.push("featured_media");
+      }
 
       if (Object.keys(body).length === 0) {
         return JSON.stringify({ error: "No fields to update" });

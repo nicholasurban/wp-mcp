@@ -56,6 +56,7 @@ export const TOOL_SCHEMA = {
   categories: z.array(z.union([z.string(), z.number()])).optional().describe("Category IDs or names"),
   tags: z.array(z.union([z.string(), z.number()])).optional().describe("Tag IDs or names"),
   featured_media: z.number().optional().describe("Featured image media ID"),
+  featured_image_url: z.string().optional().describe("URL to sideload as featured image (alternative to featured_media ID)"),
   meta: z.record(z.string(), z.unknown()).optional().describe("Custom meta fields key-value pairs"),
   orderby: z.string().optional().describe("Sort: date, title, modified, id"),
   seo: z.object({
