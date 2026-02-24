@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { inlineFormat } from "../converter/inline.js";
+import { markdownToGutenberg } from "../converter/markdown.js";
 
 describe("inlineFormat", () => {
   it("converts bold", () => {
@@ -19,5 +20,95 @@ describe("inlineFormat", () => {
   });
   it("returns plain text unchanged", () => {
     expect(inlineFormat("no formatting here")).toBe("no formatting here");
+  });
+});
+
+describe("markdownToGutenberg", () => {
+  it("converts H2 heading", () => {
+    const result = markdownToGutenberg("## Hello World");
+    expect(result).toContain("<!-- wp:heading -->");
+    expect(result).toContain('<h2 class="wp-block-heading">Hello World</h2>');
+    expect(result).toContain("<!-- /wp:heading -->");
+  });
+
+  it("converts H3 heading with level attribute", () => {
+    const result = markdownToGutenberg("### Sub Heading");
+    expect(result).toContain('<!-- wp:heading {"level":3} -->');
+    expect(result).toContain("<h3");
+  });
+
+  it("converts paragraph", () => {
+    const result = markdownToGutenberg("Just a paragraph.");
+    expect(result).toContain("<!-- wp:paragraph -->");
+    expect(result).toContain("<p>Just a paragraph.</p>");
+  });
+
+  it("converts unordered list", () => {
+    const result = markdownToGutenberg("- Item A\n- Item B");
+    expect(result).toContain("<!-- wp:list -->");
+    expect(result).toContain("<!-- wp:list-item --><li>Item A</li><!-- /wp:list-item -->");
+  });
+
+  it("converts ordered list", () => {
+    const result = markdownToGutenberg("1. First\n2. Second");
+    expect(result).toContain('<!-- wp:list {"ordered":true} -->');
+    expect(result).toContain("<ol");
+  });
+
+  it("converts image", () => {
+    const result = markdownToGutenberg("![alt text](https://example.com/img.jpg)");
+    expect(result).toContain("<!-- wp:image");
+    expect(result).toContain('src="https://example.com/img.jpg"');
+    expect(result).toContain('alt="alt text"');
+  });
+
+  it("converts blockquote", () => {
+    const result = markdownToGutenberg("> A wise quote");
+    expect(result).toContain("<!-- wp:quote -->");
+    expect(result).toContain("<blockquote");
+  });
+
+  it("converts code block", () => {
+    const result = markdownToGutenberg("```\nconst x = 1;\n```");
+    expect(result).toContain("<!-- wp:code -->");
+    expect(result).toContain("const x = 1;");
+  });
+
+  it("strips H1 lines", () => {
+    const result = markdownToGutenberg("# Title\n\n## Real Heading");
+    expect(result).not.toContain("<h1");
+    expect(result).toContain("<h2");
+  });
+
+  it("passes through raw Gutenberg blocks", () => {
+    const raw = '<!-- wp:paragraph -->\n<p>Already Gutenberg</p>\n<!-- /wp:paragraph -->';
+    const result = markdownToGutenberg(raw);
+    expect(result).toContain(raw);
+  });
+
+  it("converts markdown table to wp:table", () => {
+    const md = "| Name | Score |\n| --- | --- |\n| Alice | 95 |\n| Bob | 87 |";
+    const result = markdownToGutenberg(md);
+    expect(result).toContain("<!-- wp:table -->");
+    expect(result).toContain("<table>");
+    expect(result).toContain("<th>Name</th>");
+    expect(result).toContain("<td>Alice</td>");
+  });
+
+  it("wraps shortcodes in wp:shortcode blocks", () => {
+    const result = markdownToGutenberg("[otr_transcript]\nContent here\n[/otr_transcript]");
+    expect(result).toContain("<!-- wp:shortcode -->");
+    expect(result).toContain("[otr_transcript]");
+  });
+
+  it("applies inline formatting inside paragraphs", () => {
+    const result = markdownToGutenberg("Text with **bold** word.");
+    expect(result).toContain("<strong>bold</strong>");
+  });
+
+  it("handles heading with CSS class suffix", () => {
+    const result = markdownToGutenberg("## Transcript {.podcast-transcript}");
+    expect(result).toContain("podcast-transcript");
+    expect(result).not.toContain("{.podcast-transcript}");
   });
 });

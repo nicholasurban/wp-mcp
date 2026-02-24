@@ -1,5 +1,5 @@
 import { ToolContext, ToolParams } from "../tool.js";
-import { inlineFormat } from "../converter/inline.js";
+import { markdownToGutenberg } from "../converter/markdown.js";
 
 export async function handleConvert(
   _ctx: ToolContext,
@@ -11,7 +11,7 @@ export async function handleConvert(
 
   // TODO: strip AI commentary (params.strip_ai_commentary)
   // TODO: enhance @hints (params.enhance)
-  // TODO: convert markdown to Gutenberg blocks
 
+  content = markdownToGutenberg(content);
   return JSON.stringify({ content });
 }
