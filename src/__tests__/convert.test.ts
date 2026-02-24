@@ -175,4 +175,37 @@ describe("enhanceHints", () => {
     const input = "## Regular Heading\n\nRegular paragraph.";
     expect(enhanceHints(input)).toBe(input);
   });
+
+  it("converts FAQ hint", () => {
+    const input = "<!-- @faq -->\n**Q: What is this?**\n**A:** An answer.\n**Q: Why?**\n**A:** Because.\n<!-- @end -->";
+    const result = enhanceHints(input);
+    expect(result).toContain("wp:rank-math/faq-block");
+    expect(result).toContain("What is this?");
+    expect(result).toContain("An answer.");
+  });
+
+  it("converts CTA hint (self-closing)", () => {
+    const input = '<!-- @cta url="https://example.com" text="Buy Now" sponsored="true" -->';
+    const result = enhanceHints(input);
+    expect(result).toContain("wp:generateblocks/button");
+    expect(result).toContain('href="https://example.com"');
+    expect(result).toContain("Buy Now");
+    expect(result).toContain('rel="sponsored"');
+  });
+
+  it("converts key-takeaways hint", () => {
+    const input = "<!-- @key-takeaways -->\n- First point\n- Second point\n<!-- @end -->";
+    const result = enhanceHints(input);
+    expect(result).toContain("accordion");
+    expect(result).toContain("Key Takeaways");
+    expect(result).toContain("First point");
+  });
+
+  it("converts jump-links hint", () => {
+    const input = '<!-- @jump-links title="Top Picks" -->\n- **Product A** — Best overall\n- **Product B** — Budget pick\n<!-- @end -->';
+    const result = enhanceHints(input);
+    expect(result).toContain("intro-box-overview");
+    expect(result).toContain("Top Picks");
+    expect(result).toContain("<strong>Product A</strong>");
+  });
 });
