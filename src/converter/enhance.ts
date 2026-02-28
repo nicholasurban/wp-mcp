@@ -3,7 +3,6 @@ import {
   LIGHTBULB_SVG,
   FIRE_SVG,
   ARROW_SVG,
-  DNA_EMOJI_IMG,
   STAR_SVG,
 } from "./icons.js";
 
@@ -27,22 +26,20 @@ function genClickToTweet(lines: string[]): string {
 
 /**
  * Generate a Pro Tip Gutenberg block (3 nested generateblocks).
- * Matches enhance.sh gen_protip_block() exactly.
+ * Uses EXACT template from reusable block 40521 — only text content changes.
+ * UniqueIds, globalClasses, and all attributes are locked to the template.
  */
 function genProTip(lines: string[]): string {
   const text = lines
     .filter((l) => l.trim())
     .map((l) => l.trim())
     .join(" ");
-  const uidOuter = generateUniqueId();
-  const uidInner = generateUniqueId();
-  const uidHeadline = generateUniqueId();
 
   return [
-    `<!-- wp:generateblocks/container {"uniqueId":"${uidOuter}","isDynamic":true,"blockVersion":4,"blockLabel":"ProTip","className":"protip-wrapper protip-outer-wrapper","globalClasses":["pro-tip-container","pro-tip-container-outline","content-enhancer"]} -->`,
-    `<!-- wp:generateblocks/container {"uniqueId":"${uidInner}","isDynamic":true,"blockVersion":4,"className":"protip-inner-wrapper","globalClasses":["pro-tip-inner-container"]} -->`,
-    `<!-- wp:generateblocks/headline {"uniqueId":"${uidHeadline}","element":"p","blockVersion":3,"hasIcon":true,"iconStyles":{"width":"2em","height":"2em","widthMobile":"1.5em","heightMobile":"1.5em"},"globalClasses":["pro-tip-text"]} -->`,
-    `<p class="gb-headline gb-headline-${uidHeadline} pro-tip-text"><span class="gb-icon">${LIGHTBULB_SVG}</span><span class="gb-headline-text"><strong>Pro Tip:</strong> ${text}</span></p>`,
+    `<!-- wp:generateblocks/container {"uniqueId":"8766bab4","isDynamic":true,"blockVersion":4,"blockLabel":"ProTip","className":"protip-wrapper protip-outer-wrapper","metadata":{"name":"Pro Tip"},"globalClasses":["pro-tip-container"]} -->`,
+    `<!-- wp:generateblocks/container {"uniqueId":"d43560c2","isDynamic":true,"blockVersion":4,"className":"protip-wrapper protip-inner-wrapper","globalClasses":["pro-tip-container-inner"]} -->`,
+    `<!-- wp:generateblocks/headline {"uniqueId":"c1e5fdf3","element":"p","blockVersion":3,"display":"flex","displayMobile":"inline-flex","flexDirectionMobile":"row","alignItems":"flex-start","alignItemsMobile":"flex-start","columnGap":"0.5em","columnGapMobile":"0em","spacing":{"marginBottom":"0px"},"linkColor":"var(\\u002d\\u002daccent)","hasIcon":true,"iconStyles":{"height":"1.5em","width":"1.5em","paddingTop":"0px","paddingTopMobile":"0px","paddingLeftMobile":"0px","paddingRightMobile":"5px"},"globalClasses":["pro-tip-text"]} -->`,
+    `<p class="gb-headline gb-headline-c1e5fdf3 pro-tip-text"><span class="gb-icon">${LIGHTBULB_SVG}</span><span class="gb-headline-text"><strong>Pro Tip:</strong> ${text}</span></p>`,
     `<!-- /wp:generateblocks/headline -->`,
     `<!-- /wp:generateblocks/container -->`,
     `<!-- /wp:generateblocks/container -->`,
@@ -72,32 +69,59 @@ function genDiscount(lines: string[]): string {
 
 /**
  * Generate a RankMath FAQ Gutenberg block from Q/A pairs.
+ * Supports two input formats:
+ *   1. ## heading + answer paragraph (preferred, matches skill docs)
+ *   2. **Q: text** / **A:** text (legacy)
  */
 function genFaq(lines: string[]): string {
   const pairs: { q: string; a: string }[] = [];
   let currentQ = "";
+  let currentA: string[] = [];
+
+  function flushPair() {
+    if (currentQ && currentA.length > 0) {
+      pairs.push({ q: currentQ, a: currentA.join(" ") });
+    }
+    currentQ = "";
+    currentA = [];
+  }
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Match **Q: text** pattern
+    // Format 1: ## heading (question)
+    const h2Match = trimmed.match(/^##\s+(.+?)(\?)?$/);
+    if (h2Match) {
+      flushPair();
+      currentQ = h2Match[1] + (h2Match[2] || "?");
+      continue;
+    }
+
+    // Format 2: **Q: text** (legacy)
     const qMatch = trimmed.match(/^\*\*Q:\s*(.+?)\*\*$/);
     if (qMatch) {
+      flushPair();
       currentQ = qMatch[1];
       continue;
     }
 
-    // Match **A:** text pattern
+    // Format 2: **A:** text (legacy)
     const aMatch = trimmed.match(/^\*\*A:\*\*\s*(.+)$/);
     if (aMatch && currentQ) {
-      pairs.push({ q: currentQ, a: aMatch[1] });
-      currentQ = "";
+      currentA.push(aMatch[1]);
+      continue;
+    }
+
+    // Any other non-empty line while we have a question = answer text
+    if (currentQ) {
+      currentA.push(trimmed);
     }
   }
+  flushPair();
 
   const questions = pairs.map((p) => ({
-    id: `faq-question-${Date.now()}${generateUniqueId()}`,
+    id: `faq-question-${generateUniqueId()}${generateUniqueId()}`,
     title: p.q,
     content: p.a,
     visible: true,
@@ -144,8 +168,20 @@ function genCta(attrs: string): string {
   ].join("\n");
 }
 
+// Template headline IDs from reusable block 51824 — use in order, wrap around for 9+ items
+const KEY_TAKEAWAY_HEADLINE_IDS = [
+  "60005305", "426bc5ac", "b74b277c", "2e7c9b3f",
+  "be20854d", "a3f7e821", "c94d5b16", "f1e08a3c",
+];
+
+// Accordion chevron SVGs from reusable block 51824
+const CHEVRON_DOWN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="1em" height="1em" aria-hidden="true" role="img" class="gb-accordion__icon"><path d="M207.029 381.476L12.686 187.132c-9.373-9.373-9.373-24.569 0-33.941l22.667-22.667c9.357-9.357 24.522-9.375 33.901-.04L224 284.505l154.745-154.021c9.379-9.335 24.544-9.317 33.901.04l22.667 22.667c9.373 9.373 9.373 24.569 0 33.941L240.971 381.476c-9.373 9.372-24.569 9.372-33.942 0z" fill="currentColor"></path></svg>';
+const CHEVRON_UP_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="1em" height="1em" aria-hidden="true" role="img" class="gb-accordion__icon-open"><path d="M240.971 130.524l194.343 194.343c9.373 9.373 9.373 24.569 0 33.941l-22.667 22.667c-9.357 9.357-24.522 9.375-33.901.04L224 227.495 69.255 381.516c-9.379 9.335-24.544 9.317-33.901-.04l-22.667-22.667c-9.373-9.373-9.373-24.569 0-33.941L207.03 130.525c9.372-9.373 24.568-9.373 33.941-.001z" fill="currentColor"></path></svg>';
+
 /**
  * Generate a Key Takeaways accordion Gutenberg block.
+ * Uses EXACT template from reusable block 51824 — only text content changes.
+ * UniqueIds, globalClasses, and all attributes are locked to the template.
  */
 function genKeyTakeaways(lines: string[]): string {
   const items = lines
@@ -153,29 +189,25 @@ function genKeyTakeaways(lines: string[]): string {
     .filter((l) => l.startsWith("- "))
     .map((l) => l.slice(2).trim());
 
-  const uidAccordion = generateUniqueId();
-  const uidItem = generateUniqueId();
-  const uidToggle = generateUniqueId();
-  const uidContent = generateUniqueId();
-
   const itemBlocks = items
-    .map((item) => {
-      const uidHeadline = generateUniqueId();
+    .map((item, i) => {
+      const uid = KEY_TAKEAWAY_HEADLINE_IDS[i % KEY_TAKEAWAY_HEADLINE_IDS.length];
       return [
-        `<!-- wp:generateblocks/headline {"uniqueId":"${uidHeadline}","element":"p","blockVersion":3,"hasIcon":true,"iconStyles":{"width":"","height":"","paddingRight":"0.5em"},"globalClasses":["key-takeaways-item"]} -->`,
-        `<p class="gb-headline gb-headline-${uidHeadline} key-takeaways-item"><span class="gb-icon">${DNA_EMOJI_IMG}</span><span class="gb-headline-text">${item}</span></p>`,
+        `<!-- wp:generateblocks/headline {"uniqueId":"${uid}","element":"p","blockVersion":3,"hasIcon":true,"globalClasses":["key-takeaways-item"]} -->`,
+        `<p class="gb-headline gb-headline-${uid} key-takeaways-item"><span class="gb-icon">🧬</span><span class="gb-headline-text">${item}</span></p>`,
         `<!-- /wp:generateblocks/headline -->`,
       ].join("\n");
     })
-    .join("\n");
+    .join("\n\n");
 
   return [
-    `<!-- wp:generateblocks/container {"uniqueId":"${uidAccordion}","isDynamic":true,"blockVersion":4,"variantRole":"accordion","metadata":{"name":"Key Takeaways"},"globalClasses":["accordion-outline","key-takeaways-top"]} -->`,
-    `<!-- wp:generateblocks/container {"uniqueId":"${uidItem}","isDynamic":true,"blockVersion":4,"variantRole":"accordion-item","globalClasses":["accordion-outline-item"]} -->`,
-    `<!-- wp:generateblocks/button {"uniqueId":"${uidToggle}","blockVersion":4,"variantRole":"accordion-toggle","globalClasses":["accordion-outline-title"]} -->`,
-    `<button class="gb-button gb-button-${uidToggle} accordion-outline-title">Key Takeaways</button>`,
+    `<!-- wp:generateblocks/container {"uniqueId":"ca82a9de","isDynamic":true,"blockVersion":4,"variantRole":"accordion","metadata":{"name":"Key Takeaways"},"globalClasses":["accordion-outline","key-takeaways-top"]} -->`,
+    `<!-- wp:generateblocks/container {"uniqueId":"484d6c67","isDynamic":true,"blockVersion":4,"variantRole":"accordion-item","metadata":{"name":"Entire Accordion Item"},"globalClasses":["accordion-outline-item"]} -->`,
+    `<!-- wp:generateblocks/button {"uniqueId":"9988d281","anchor":"gb-accordion-toggle-9988d281","blockVersion":4,"variantRole":"accordion-toggle","buttonType":"button","position":"relative","hasIcon":true,"iconLocation":"right","metadata":{"name":"Accordion Button"},"globalClasses":["accordion-outline-title"]} -->`,
+    `<button class="gb-button gb-button-9988d281 gb-accordion__toggle accordion-outline-title" id="gb-accordion-toggle-9988d281"><span class="gb-button-text">🔬 Key Takeaways</span><span class="gb-icon">${CHEVRON_DOWN_SVG}${CHEVRON_UP_SVG}</span></button>`,
     `<!-- /wp:generateblocks/button -->`,
-    `<!-- wp:generateblocks/container {"uniqueId":"${uidContent}","isDynamic":true,"blockVersion":4,"variantRole":"accordion-content","globalClasses":["accordion-outline-content-key-takeaways"]} -->`,
+    ``,
+    `<!-- wp:generateblocks/container {"uniqueId":"5c86dbb2","anchor":"gb-accordion-content-5c86dbb2","gradientDirection":360,"gradientColorOne":"rgba(255, 255, 255, 0.1)","gradientColorTwo":"rgba(0, 0, 0, 0.30)","gradientSelector":"pseudo-element","isDynamic":true,"blockVersion":4,"variantRole":"accordion-content","position":"relative","overflowX":"hidden","overflowY":"hidden","metadata":{"name":"Accordion Content Container"},"advBackgrounds":[{"target":"self","device":"all","state":"normal","type":"gradient","direction":179,"colorOne":"rgba(255, 255, 255, 0.1)","colorTwo":"rgba(0, 0, 0, 0.30)","stopOne":83,"stopTwo":17}],"globalClasses":["accordion-outline-content-key-takeaways"]} -->`,
     itemBlocks,
     `<!-- /wp:generateblocks/container -->`,
     `<!-- /wp:generateblocks/container -->`,
