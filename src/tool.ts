@@ -16,7 +16,7 @@ export const TOOL_NAME = "wordpress";
 
 export const TOOL_DESCRIPTION = `Manage WordPress (outliyr.com). 8 modes:
 - dashboard: site overview — WP version, theme, plugin count, post counts by type
-- posts: list/get/create/update/delete any accepted post type (posts, pages, CPTs)
+- posts: list/get/create/update/delete any post type; set content_format:"markdown" for server-side conversion (avoids sending Gutenberg blocks through LLM context)
 - products: WooCommerce product CRUD — list/get/create/update/delete
 - settings: read/write WordPress options — general settings or raw wp_options
 - media: list/upload/delete media library items
@@ -51,6 +51,7 @@ export const TOOL_SCHEMA = {
   slug: z.string().optional().describe("Post/page URL slug"),
   title: z.string().optional().describe("Post/product title or media title"),
   content: z.string().optional().describe("Post content (Gutenberg blocks or HTML); for convert mode, the markdown content to convert"),
+  content_format: z.enum(["html", "markdown"]).optional().describe("Content format: 'markdown' runs server-side conversion (strip+enhance+convert) so converted blocks never flow through LLM context. Default 'html' (pass-through)."),
   excerpt: z.string().optional().describe("Post excerpt"),
   status: z.string().optional().describe("Post/product status: draft, publish, pending, private, trash"),
   categories: z.array(z.union([z.string(), z.number()])).optional().describe("Category IDs or names"),

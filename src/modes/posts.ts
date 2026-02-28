@@ -1,5 +1,8 @@
 import { ToolContext, ToolParams } from "../tool.js";
 import { WordPressAPI } from "../api.js";
+import { markdownToGutenberg } from "../converter/markdown.js";
+import { stripAiCommentary } from "../converter/strip.js";
+import { enhanceHints } from "../converter/enhance.js";
 
 async function resolveTermIds(
   api: WordPressAPI,
@@ -119,6 +122,13 @@ export async function handlePosts(ctx: ToolContext, params: ToolParams): Promise
   const defaults = ctx.feedback.getDefaults(postType);
   const perPage = params.per_page ?? (defaults.default_per_page as number | undefined) ?? 10;
   const defaultStatus = (defaults.default_status as string | undefined) ?? "draft";
+
+  // Server-side markdown conversion: strip → enhance → convert to Gutenberg
+  if (params.content && params.content_format === "markdown") {
+    let c = stripAiCommentary(params.content);
+    c = enhanceHints(c);
+    params.content = markdownToGutenberg(c);
+  }
 
   switch (action) {
     case "list": {
