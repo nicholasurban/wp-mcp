@@ -227,7 +227,7 @@ function genDataLab(title: string, columns: string, rows: string[]): string {
   const escapedColumns = columns.replace(/"/g, '\\"');
   const escapedRows = rowData.replace(/"/g, '\\"');
 
-  return `<!-- wp:outliyr/data-lab {"mode":"local_override","dataEntryMode":"visual","dataFormat":"table","builderTitle":"${escapedTitle}","builderColumnsText":"${escapedColumns}","builderRowsText":"${escapedRows}","showTable":true,"showChart":true,"defaultView":"table","titleTag":"h3"} /-->`;
+  return `<!-- wp:outliyr/data-lab {"mode":"local_override","dataEntryMode":"visual","dataFormat":"table","builderTitle":"${escapedTitle}","builderColumnsText":"${escapedColumns}","builderRowsText":"${escapedRows}","showTable":true,"showChart":false,"defaultView":"table","enableViewToggle":false,"titleTag":"h3"} /-->`;
 }
 
 /**
