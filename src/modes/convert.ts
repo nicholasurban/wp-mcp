@@ -1,7 +1,7 @@
 import { ToolContext, ToolParams } from "../tool.js";
 import { markdownToGutenberg } from "../converter/markdown.js";
 import { stripAiCommentary } from "../converter/strip.js";
-import { enhanceHints } from "../converter/enhance.js";
+import { enhanceHints, normalizeBareHints } from "../converter/enhance.js";
 
 export async function handleConvert(
   _ctx: ToolContext,
@@ -16,6 +16,7 @@ export async function handleConvert(
   }
 
   if (params.enhance) {
+    content = normalizeBareHints(content);
     content = enhanceHints(content);
   }
 
