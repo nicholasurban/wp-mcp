@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { inlineFormat } from "../converter/inline.js";
 import { markdownToGutenberg } from "../converter/markdown.js";
 import { stripAiCommentary } from "../converter/strip.js";
-import { enhanceHints } from "../converter/enhance.js";
+import { enhanceHints, normalizeBareHints } from "../converter/enhance.js";
 
 describe("inlineFormat", () => {
   it("converts bold", () => {
@@ -236,5 +236,100 @@ describe("enhanceHints", () => {
     expect(result).toContain('id="prod1"');
     expect(result).toContain("Best Overall");
     expect(result).toContain("$99");
+  });
+});
+
+describe("normalizeBareHints", () => {
+  it("converts bare @key-takeaways to HTML comment", () => {
+    expect(normalizeBareHints("@key-takeaways")).toBe("<!-- @key-takeaways -->");
+  });
+
+  it("converts <p>@faq</p> to HTML comment", () => {
+    expect(normalizeBareHints("<p>@faq</p>")).toBe("<!-- @faq -->");
+  });
+
+  it("converts bare @end to HTML comment", () => {
+    expect(normalizeBareHints("@end")).toBe("<!-- @end -->");
+  });
+
+  it("converts bare @end-product to HTML comment", () => {
+    expect(normalizeBareHints("@end-product")).toBe("<!-- @end-product -->");
+  });
+
+  it("converts bare @cta with attributes", () => {
+    const input = '@cta url="https://example.com" text="Buy Now" sponsored="true"';
+    expect(normalizeBareHints(input)).toBe('<!-- @cta url="https://example.com" text="Buy Now" sponsored="true" -->');
+  });
+
+  it("converts <p>@cta</p> with attributes inside p tags", () => {
+    const input = '<p>@cta url="https://example.com" text="Buy" sponsored="true"</p>';
+    expect(normalizeBareHints(input)).toBe('<!-- @cta url="https://example.com" text="Buy" sponsored="true" -->');
+  });
+
+  it("skips lines already containing HTML comments", () => {
+    const input = "<!-- @key-takeaways -->";
+    expect(normalizeBareHints(input)).toBe(input);
+  });
+
+  it("leaves email addresses unchanged", () => {
+    const input = "Contact user@example.com for details";
+    expect(normalizeBareHints(input)).toBe(input);
+  });
+
+  it("leaves unknown @words unchanged", () => {
+    const input = "@randomword is not a hint";
+    expect(normalizeBareHints(input)).toBe(input);
+  });
+
+  it("does not match hint names as substrings (e.g. @faq.com)", () => {
+    expect(normalizeBareHints("@faq.com")).toBe("@faq.com");
+    expect(normalizeBareHints("@discount-code")).toBe("@discount-code");
+  });
+
+  it("skips bare hints inside code fences", () => {
+    const input = "```\n@key-takeaways\n```";
+    expect(normalizeBareHints(input)).toBe(input);
+  });
+
+  it("converts bare sub-section hints (accolade, image, stats)", () => {
+    expect(normalizeBareHints("@accolade")).toBe("<!-- @accolade -->");
+    expect(normalizeBareHints("@image")).toBe("<!-- @image -->");
+    expect(normalizeBareHints("@stats")).toBe("<!-- @stats -->");
+  });
+
+  it("converts bare sub-section closers", () => {
+    expect(normalizeBareHints("@end-accolade")).toBe("<!-- @end-accolade -->");
+    expect(normalizeBareHints("@end-image")).toBe("<!-- @end-image -->");
+    expect(normalizeBareHints("@end-stats")).toBe("<!-- @end-stats -->");
+    expect(normalizeBareHints("@end-discount")).toBe("<!-- @end-discount -->");
+  });
+
+  it("handles multiline content with mixed bare and comment hints", () => {
+    const input = [
+      "## Heading",
+      "@key-takeaways",
+      "- Item one",
+      "- Item two",
+      "@end",
+      "",
+      "<!-- @faq -->",
+      "## Question?",
+      "Answer.",
+      "<!-- @end -->",
+    ].join("\n");
+    const result = normalizeBareHints(input);
+    expect(result).toContain("<!-- @key-takeaways -->");
+    expect(result).toContain("<!-- @end -->");
+    expect(result).toContain("<!-- @faq -->");
+  });
+
+  it("end-to-end: bare hints normalize then enhance to Gutenberg", () => {
+    const input = "@key-takeaways\n- First point\n- Second point\n@end";
+    const normalized = normalizeBareHints(input);
+    const enhanced = enhanceHints(normalized);
+    expect(enhanced).toContain("accordion");
+    expect(enhanced).toContain("Key Takeaways");
+    expect(enhanced).toContain("First point");
+    expect(enhanced).toContain("Second point");
   });
 });
