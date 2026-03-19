@@ -463,6 +463,81 @@ function genJumpLinks(title: string, lines: string[]): string {
 }
 
 /**
+ * Known hint opener names — must match the set recognized by enhanceHints().
+ */
+const HINT_NAMES = [
+  "click-to-tweet", "protip", "discount", "faq", "key-takeaways",
+  "jump-links", "data-lab", "product-roundup", "cta",
+  "accolade", "image", "stats",
+];
+
+const HINT_OPENER_RE = new RegExp(
+  `^\\s*(?:<p>)?\\s*(@(?:${HINT_NAMES.join("|")}))(?=\\s|"|<|$)\\s*(.*?)\\s*(?:<\\/p>)?\\s*$`
+);
+
+const HINT_CLOSER_RE = /^\s*(?:<p>)?\s*(@end(?:-product|-accolade|-image|-stats|-discount)?)(?=\s|<|$)\s*(?:<\/p>)?\s*$/;
+
+const CODE_FENCE_RE = /^```/;
+
+/**
+ * Normalize bare @hint markers to <!-- @hint --> HTML comment syntax.
+ *
+ * Converts three input variants:
+ *   - Bare text: @key-takeaways → <!-- @key-takeaways -->
+ *   - HTML-wrapped: <p>@key-takeaways</p> → <!-- @key-takeaways -->
+ *   - With attributes: @cta url="..." → <!-- @cta url="..." -->
+ *
+ * Skips lines already containing HTML comments and lines inside code fences.
+ * Runs BEFORE enhanceHints() so the state machine receives normalized input.
+ */
+export function normalizeBareHints(content: string): string {
+  const lines = content.split("\n");
+  const output: string[] = [];
+  let inCodeFence = false;
+
+  for (const line of lines) {
+    // Toggle code fence state
+    if (CODE_FENCE_RE.test(line)) {
+      inCodeFence = !inCodeFence;
+      output.push(line);
+      continue;
+    }
+
+    // Pass through inside code fences
+    if (inCodeFence) {
+      output.push(line);
+      continue;
+    }
+
+    // Skip lines already containing HTML comments
+    if (line.includes("<!--")) {
+      output.push(line);
+      continue;
+    }
+
+    // Match bare hint openers
+    const openerMatch = line.match(HINT_OPENER_RE);
+    if (openerMatch) {
+      const hint = openerMatch[1];
+      const attrs = openerMatch[2]?.trim();
+      output.push(attrs ? `<!-- ${hint} ${attrs} -->` : `<!-- ${hint} -->`);
+      continue;
+    }
+
+    // Match bare closers
+    const closerMatch = line.match(HINT_CLOSER_RE);
+    if (closerMatch) {
+      output.push(`<!-- ${closerMatch[1]} -->`);
+      continue;
+    }
+
+    output.push(line);
+  }
+
+  return output.join("\n");
+}
+
+/**
  * Process @hint markers in content, converting them to Gutenberg blocks.
  *
  * State machine parser: scans line-by-line, detects `<!-- @type -->` opening
